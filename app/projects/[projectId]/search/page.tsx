@@ -31,11 +31,12 @@ export default async function ProjectSearchPage({
   const results = await searchProject(projectId, query, tab);
 
   return (
-    <div className="space-y-8">
+    <div className="min-w-0 space-y-8">
       <PageHeader
-        eyebrow="Cross-attempt retrieval"
-        title="Search team memory"
-        description="Trace attempt history by file path, symbol, failing test, error signature, or semantic intent without crossing into plugin or backend ownership."
+        eyebrow="Search"
+        title="Search"
+        description="Find earlier attempts by file, symbol, failing test, error, or meaning."
+        helpText="Use search when you need to find similar work before starting another attempt."
         breadcrumbs={[
           { title: "Projects", href: "/" },
           { title: "Search" },
@@ -47,7 +48,7 @@ export default async function ProjectSearchPage({
       {results.notice ? (
         <Alert className="border-amber-500/25 bg-amber-500/10 text-amber-100">
           <Sparkles className="size-4" />
-          <AlertTitle>Partial backend contract</AlertTitle>
+          <AlertTitle>Search unavailable</AlertTitle>
           <AlertDescription>{results.notice}</AlertDescription>
         </Alert>
       ) : null}
@@ -55,15 +56,16 @@ export default async function ProjectSearchPage({
       {query.length === 0 ? (
         <EmptyState
           icon={Search}
-          title="Run a query"
-          description="Use the tabs to search by path, symbol, failing test, error signature, or semantic intent. Query state stays in the URL so links remain shareable."
+          title="Search"
+          description="Choose a search mode and enter a query."
         />
       ) : (
-        <Card className="surface-panel border">
+        <Card className="surface-panel min-w-0 overflow-hidden border">
           <CardHeader className="border-b border-white/10">
             <CardTitle>Results</CardTitle>
             <p className="text-sm text-muted-foreground">
-              {results.results.length} matches for <span className="font-mono">{query}</span>
+              {results.results.length} matches for{" "}
+              <span className="break-all font-mono text-foreground/80">{query}</span>
             </p>
           </CardHeader>
           <CardContent className="p-0">
@@ -72,7 +74,7 @@ export default async function ProjectSearchPage({
                 <EmptyState
                   icon={Search}
                   title="No matches found"
-                  description="Try a broader query or switch retrieval mode. Semantic search depends on the embed function and RPC being live."
+                  description="Try a broader term or another search mode."
                 />
               </div>
             ) : (

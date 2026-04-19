@@ -1,6 +1,6 @@
 # Hindsight Frontend
 
-P2 dashboard for Hindsight. This repository contains only the Next.js frontend.
+Frontend dashboard for Hindsight.
 
 ## Stack
 
@@ -20,7 +20,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-P3 owns provisioning the Supabase project, tables, RPCs, edge function, and realtime setup. This app only consumes those contracts.
+This app reads from an existing Supabase project. It does not create or manage backend resources.
 
 ## Scripts
 
@@ -44,8 +44,9 @@ npm run dev
   - `attempts`
   - `outcomes`
 
-## Separation of concerns
+## Scope
 
-- P2 owns the dashboard UI, route structure, client-side querying, and realtime refresh behavior.
-- Elbion owns the JetBrains plugin, local SQLite, MCP server, warning logic, and sync worker.
-- P3 owns Supabase provisioning, migrations, RPCs, edge functions, demo assets, and seed data.
+- Dashboard UI
+- Route structure
+- Read-only Supabase queries
+- Realtime refresh for project updates

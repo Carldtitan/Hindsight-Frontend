@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { InfoHint } from "@/components/dashboard/info-hint";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -18,7 +19,8 @@ interface BreadcrumbItemData {
 interface PageHeaderProps {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
+  helpText?: string;
   breadcrumbs: BreadcrumbItemData[];
   actions?: React.ReactNode;
 }
@@ -27,6 +29,7 @@ export function PageHeader({
   eyebrow,
   title,
   description,
+  helpText,
   breadcrumbs,
   actions,
 }: PageHeaderProps) {
@@ -50,21 +53,26 @@ export function PageHeader({
           ))}
         </BreadcrumbList>
       </Breadcrumb>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-2">
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0 space-y-2">
           <p className="font-mono text-xs uppercase tracking-[0.28em] text-sky-300">
             {eyebrow}
           </p>
-          <div className="space-y-3">
-            <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">
-              {title}
-            </h1>
-            <p className="max-w-3xl text-sm text-muted-foreground md:text-base">
-              {description}
-            </p>
+          <div className="min-w-0 space-y-2">
+            <div className="flex min-w-0 items-start gap-2">
+              <h1 className="min-w-0 text-balance break-words text-3xl font-semibold tracking-tight md:text-4xl">
+                {title}
+              </h1>
+              {helpText ? <InfoHint className="mt-1">{helpText}</InfoHint> : null}
+            </div>
+            {description ? (
+              <p className="max-w-3xl text-sm text-muted-foreground md:text-base">
+                {description}
+              </p>
+            ) : null}
           </div>
         </div>
-        {actions ? <div className="flex items-center gap-3">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 items-center gap-3">{actions}</div> : null}
       </div>
       <Separator className="bg-white/8" />
     </div>

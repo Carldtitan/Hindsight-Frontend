@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PUBLIC_SUPABASE_ANON_KEY,
+  PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   PUBLIC_SUPABASE_URL,
 } from "@/lib/env";
 
@@ -19,12 +20,10 @@ export function ConfigMissingState() {
             </div>
             <div className="space-y-2">
               <CardTitle className="text-3xl font-semibold tracking-tight">
-                Supabase is not configured
+                Connection settings required
               </CardTitle>
               <p className="max-w-2xl text-sm text-muted-foreground">
-                The P2 dashboard compiles without backend credentials, but it needs
-                the shared team Supabase URL and anon key before it can load project
-                memory.
+                Add the Supabase URL and public key to load project data.
               </p>
             </div>
           </div>
@@ -32,11 +31,13 @@ export function ConfigMissingState() {
         <CardContent className="space-y-4 p-6">
           <Alert className="border-sky-500/20 bg-sky-500/8 text-sky-100">
             <Settings2 className="size-4" />
-            <AlertTitle>Required .env.local values</AlertTitle>
+            <AlertTitle>Required environment variables</AlertTitle>
             <AlertDescription className="mt-2 font-mono text-xs leading-6 text-sky-100/80">
               {PUBLIC_SUPABASE_URL}
               <br />
               {PUBLIC_SUPABASE_ANON_KEY}
+              <br />
+              {PUBLIC_SUPABASE_PUBLISHABLE_KEY}
             </AlertDescription>
           </Alert>
           <div className="flex flex-wrap gap-3">
@@ -56,8 +57,7 @@ export function ConfigMissingState() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            P3 owns provisioning the Supabase project, RPCs, edge function, and
-            realtime setup. This frontend only consumes those contracts.
+            The dashboard reads data directly from Supabase and subscribes to realtime updates.
           </p>
         </CardContent>
       </Card>

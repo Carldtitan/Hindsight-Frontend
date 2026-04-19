@@ -1,15 +1,33 @@
-import Link from "next/link";
-import { ArrowUpRight, FolderKanban, Radar, Workflow } from "lucide-react";
-import { redirect } from "next/navigation";
+import { AlertTriangle, FolderKanban, GitBranchPlus, Search } from "lucide-react";
+import { cookies } from "next/headers";
 
 import { ConfigMissingState } from "@/components/dashboard/config-missing-state";
 import { EmptyState } from "@/components/dashboard/empty-state";
-import { StatusBadge } from "@/components/dashboard/status-badge";
+import { WorkspaceViewScrollReset } from "@/components/dashboard/workspace-view-scroll-reset";
+import {
+  ProjectBrowser,
+  type ProjectBrowserItem,
+} from "@/components/dashboard/project-browser";
+import { WorkspaceSidebar } from "@/components/dashboard/workspace-sidebar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/dashboard/page-header";
+import { StatCard } from "@/components/dashboard/stat-card";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import {
+  getOutcomeHeadline,
+  getProjectRepoHref,
+  getProjectRepoLabel,
+} from "@/lib/display";
 import { isSupabaseConfigured } from "@/lib/env";
-import { formatAbsoluteTime, formatRelativeTime } from "@/lib/formatting";
+import { formatRelativeTime } from "@/lib/formatting";
 import { getProjects, getProjectOverview } from "@/lib/data";
+
+const SIDEBAR_COOKIE_NAME = "sidebar_state";
 
 export default async function HomePage() {
   if (!isSupabaseConfigured()) {
@@ -17,38 +35,62 @@ export default async function HomePage() {
   }
 
   const projects = await getProjects();
-
-  if (projects.length === 1) {
-    redirect(`/projects/${projects[0].id}`);
-  }
+  const sidebarCookieStore = await cookies();
+  const defaultSidebarOpen =
+    sidebarCookieStore.get(SIDEBAR_COOKIE_NAME)?.value !== "false";
 
   if (projects.length === 0) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-4 py-12 md:px-8">
-        <section className="space-y-6">
-          <div className="flex items-center gap-3 text-sky-300">
-            <Radar className="size-5" />
-            <p className="font-mono text-xs uppercase tracking-[0.24em]">
-              Hindsight command center
-            </p>
+      <SidebarProvider defaultOpen={defaultSidebarOpen}>
+        <WorkspaceSidebar projects={[]} />
+        <SidebarInset className="h-screen overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <header className="z-20 shrink-0 border-b border-white/8 bg-background/90 backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SidebarTrigger className="shrink-0" />
+                  <div className="hidden h-8 w-px bg-white/10 md:block" />
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-sky-300">
+                      Workspace
+                    </p>
+                    <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                      <FolderKanban className="size-4 shrink-0 text-sky-300" />
+                      <span className="truncate">Projects</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </header>
+            <div
+              data-workspace-scroll-root
+              className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-6"
+            >
+              <WorkspaceViewScrollReset />
+              <PageHeader
+                eyebrow="Workspace"
+                title="Projects"
+                description="Project history will appear here after tasks and attempts are synced."
+                helpText="Each project groups the tasks, attempts, and outcomes recorded for one codebase."
+                breadcrumbs={[{ title: "Projects" }]}
+                actions={
+                  <Badge
+                    variant="outline"
+                    className="border-white/10 bg-white/5 text-muted-foreground"
+                  >
+                    0 projects
+                  </Badge>
+                }
+              />
+              <EmptyState
+                icon={FolderKanban}
+                title="No projects available"
+                description="The database is connected, but no project rows exist yet."
+              />
+            </div>
           </div>
-          <div className="space-y-4">
-            <h1 className="text-balance text-4xl font-semibold tracking-tight md:text-6xl">
-              Team attempt memory, without frontend-side guesswork.
-            </h1>
-            <p className="max-w-3xl text-base text-muted-foreground md:text-lg">
-              This dashboard is ready to read project memory as soon as P3 provisions
-              Supabase and Elbion starts syncing attempts. Until then, there are no
-              projects to display.
-            </p>
-          </div>
-        </section>
-        <EmptyState
-          icon={FolderKanban}
-          title="No projects synced yet"
-          description="Start coding. Hindsight will fill in as your agent acts."
-        />
-      </main>
+        </SidebarInset>
+      </SidebarProvider>
     );
   }
 
@@ -58,160 +100,117 @@ export default async function HomePage() {
       overview: await getProjectOverview(project.id),
     })),
   );
+  const totalActiveTasks = projectSnapshots.reduce(
+    (sum, snapshot) => sum + (snapshot.overview?.stats.active_tasks ?? 0),
+    0,
+  );
+  const totalFailed24h = projectSnapshots.reduce(
+    (sum, snapshot) => sum + (snapshot.overview?.stats.failed_attempts_24h ?? 0),
+    0,
+  );
+  const browserProjects: ProjectBrowserItem[] = projectSnapshots.map(({ project, overview }) => {
+    const latestAttempt = overview?.attempts[0] ?? null;
+    const hottestFile = overview?.stats.top_dead_end_files[0] ?? null;
+
+    return {
+      id: project.id,
+      name: project.name,
+      repoLabel: getProjectRepoLabel(project.repo_url),
+      repoHref: getProjectRepoHref(project.repo_url),
+      openTasks: overview?.stats.active_tasks ?? 0,
+      failed24h: overview?.stats.failed_attempts_24h ?? 0,
+      attemptsShown: overview?.attempts.length ?? 0,
+      latestAttemptSummary: latestAttempt?.attempt.summary ?? null,
+      latestOutcomeHeadline: getOutcomeHeadline(latestAttempt?.outcomes[0] ?? null),
+      latestAttemptAt: latestAttempt
+        ? formatRelativeTime(latestAttempt.attempt.started_at)
+        : null,
+      hotFilePath: hottestFile?.path ?? null,
+      hotFileSignal: hottestFile?.latest_failure_signal ?? null,
+    };
+  });
+  const sidebarProjects = projects.slice(0, 6).map((project) => ({
+    id: project.id,
+    name: project.name,
+  }));
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-4 py-12 md:px-8">
-      <section className="grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <Card className="surface-panel surface-grid overflow-hidden border">
-          <CardContent className="space-y-8 p-8">
-            <div className="flex items-center gap-3 text-sky-300">
-              <Radar className="size-5" />
-              <p className="font-mono text-xs uppercase tracking-[0.24em]">
-                Hindsight frontend / P2
-              </p>
-            </div>
-            <div className="space-y-4">
-              <h1 className="text-balance text-4xl font-semibold tracking-tight md:text-6xl">
-                Read-only team memory for failed fixes, pivots, and task lineage.
-              </h1>
-              <p className="max-w-3xl text-base text-muted-foreground md:text-lg">
-                The dashboard stays distinct from Elbion and P3. It reads projects,
-                tasks, attempts, file touches, and outcomes directly from the shared
-                Supabase contract and surfaces them as a dense engineering command
-                center.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild className="bg-sky-500 text-slate-950 hover:bg-sky-400">
-                <a href="#projects">Browse projects</a>
-              </Button>
-              <Button variant="outline" asChild>
-                <a
-                  href="https://github.com/Carldtitan/Hindsight-Frontend"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ArrowUpRight className="size-4" />
-                  Repository
-                </a>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="surface-panel border">
-          <CardHeader className="border-b border-white/10">
-            <CardTitle className="text-lg">What this frontend consumes</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 p-6">
-            {[
-              "Supabase tables: projects, tasks, attempts, file_touches, outcomes",
-              "RPCs: project_stats and match_attempts_semantic",
-              "Edge function: functions/v1/embed for semantic search",
-              "Realtime on attempts and outcomes",
-            ].map((line) => (
-              <div
-                key={line}
-                className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-muted-foreground"
-              >
-                {line}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
-
-      <section id="projects" className="space-y-6">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">
-              Synced projects
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">
-              Team memory surfaces
-            </h2>
-          </div>
-          <StatusBadge status="in_progress" />
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          {projectSnapshots.map(({ project, overview }) => (
-            <Card key={project.id} className="surface-panel border">
-              <CardHeader className="border-b border-white/10">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-2">
-                    <CardTitle className="text-xl">{project.name}</CardTitle>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      {project.repo_url ?? "No repo URL"}
-                    </p>
+    <SidebarProvider defaultOpen={defaultSidebarOpen}>
+      <WorkspaceSidebar projects={sidebarProjects} />
+      <SidebarInset className="h-screen overflow-hidden">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="z-20 shrink-0 border-b border-white/8 bg-background/90 backdrop-blur-xl">
+              <div className="flex items-center justify-between gap-4 px-4 py-3 md:px-6">
+                <div className="flex min-w-0 items-center gap-3">
+                  <SidebarTrigger className="shrink-0" />
+                <div className="hidden h-8 w-px bg-white/10 md:block" />
+                <div className="min-w-0 space-y-1">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-sky-300">
+                    Workspace
+                  </p>
+                  <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                    <FolderKanban className="size-4 shrink-0 text-sky-300" />
+                    <span className="truncate">Projects</span>
                   </div>
-                  <Button asChild variant="outline">
-                    <Link href={`/projects/${project.id}`}>Open dashboard</Link>
+                </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="#project-search">
+                      <Search className="size-4" />
+                      Search
+                    </a>
                   </Button>
+                  <Badge
+                    variant="outline"
+                    className="border-white/10 bg-white/5 text-muted-foreground"
+                  >
+                    {projectSnapshots.length} {projectSnapshots.length === 1 ? "project" : "projects"}
+                  </Badge>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                      Tasks
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {overview?.tasks.length ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                      Attempts
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {overview?.attempts.length ?? 0}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                    <p className="font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                      Active tasks
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold">
-                      {overview?.stats.active_tasks ?? 0}
-                    </p>
-                  </div>
-                </div>
+              </div>
+            </header>
 
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Workflow className="size-4 text-sky-300" />
-                    Latest recorded attempt
-                  </div>
-                  {overview?.attempts[0] ? (
-                    <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-2">
-                          <p className="font-medium text-foreground">
-                            {overview.attempts[0].attempt.summary ?? "No summary generated yet"}
-                          </p>
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {overview.attempts[0].fileTouches[0]?.path ?? "No file touch data"}
-                          </p>
-                        </div>
-                        <StatusBadge status={overview.attempts[0].attempt.status} />
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                        <span>{formatRelativeTime(overview.attempts[0].attempt.started_at)}</span>
-                        <span>{formatAbsoluteTime(overview.attempts[0].attempt.started_at)}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-white/12 bg-black/10 p-4 text-sm text-muted-foreground">
-                      No attempts have landed yet for this project.
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          <div
+            data-workspace-scroll-root
+            className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-6"
+          >
+            <WorkspaceViewScrollReset />
+            <div className="flex min-h-0 flex-1 flex-col gap-6">
+              <PageHeader
+                eyebrow="Workspace"
+                title="Projects"
+                description="Select a project to inspect recent work, failures, and outcomes."
+                helpText="Use this page to move between projects. Each card summarizes recent activity for one codebase."
+                breadcrumbs={[{ title: "Projects" }]}
+              />
+
+              <section className="grid gap-4 xl:grid-cols-3">
+                <StatCard
+                  icon={FolderKanban}
+                  label="Projects"
+                  value={String(projectSnapshots.length)}
+                  helpText="Total projects currently tracked in team memory."
+                />
+                <StatCard
+                  icon={GitBranchPlus}
+                  label="Open tasks"
+                  value={String(totalActiveTasks)}
+                  helpText="Tasks that are still open across all projects."
+                />
+                <StatCard
+                  icon={AlertTriangle}
+                  label="Failed attempts / 24h"
+                  value={String(totalFailed24h)}
+                  helpText="Failed or reverted attempts recorded in the last 24 hours."
+                />
+              </section>
+
+              <ProjectBrowser projects={browserProjects} />
+            </div>
+          </div>
         </div>
-      </section>
-    </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

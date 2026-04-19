@@ -1,5 +1,6 @@
 export const PUBLIC_SUPABASE_URL = "NEXT_PUBLIC_SUPABASE_URL";
 export const PUBLIC_SUPABASE_ANON_KEY = "NEXT_PUBLIC_SUPABASE_ANON_KEY";
+export const PUBLIC_SUPABASE_PUBLISHABLE_KEY = "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY";
 
 export interface PublicSupabaseEnv {
   url: string;
@@ -8,7 +9,9 @@ export interface PublicSupabaseEnv {
 
 export function getPublicSupabaseEnv(): PublicSupabaseEnv | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
 
   if (!url || !anonKey) {
     return null;

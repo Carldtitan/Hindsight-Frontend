@@ -19,8 +19,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Hindsight",
-  description:
-    "Read-only command center for team attempt memory, failure patterns, and task lineage.",
+  description: "Project history for tasks, attempts, failures, and results.",
 };
 
 export default function RootLayout({

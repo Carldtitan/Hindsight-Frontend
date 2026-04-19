@@ -92,6 +92,13 @@ export interface Outcome {
 export interface TopDeadEndFile {
   path: string;
   fail_count: number;
+  latest_failure_attempt_id?: string | null;
+  latest_failure_summary?: string | null;
+  latest_failure_at?: string | null;
+  latest_failure_signal?: string | null;
+  latest_recovery_attempt_id?: string | null;
+  latest_recovery_summary?: string | null;
+  latest_recovery_at?: string | null;
 }
 
 export interface ProjectStats {
@@ -118,6 +125,13 @@ export interface AttemptRecord {
   outcomes: Outcome[];
 }
 
+export interface TaskSummary {
+  task: Task;
+  attemptCount: number;
+  latestAttempt: Attempt | null;
+  latestOutcome: Outcome | null;
+}
+
 export interface ProjectChromeData {
   project: Project;
   activeTasks: Task[];
@@ -125,7 +139,7 @@ export interface ProjectChromeData {
 
 export interface ProjectOverviewData {
   project: Project;
-  tasks: Task[];
+  tasks: TaskSummary[];
   attempts: AttemptRecord[];
   stats: ProjectStats;
 }
@@ -149,6 +163,8 @@ export interface SearchResult {
   matchedValue: string;
   note: string | null;
   attempt: Attempt;
+  task: Task | null;
+  latestOutcome: Outcome | null;
   score?: number;
 }
 
