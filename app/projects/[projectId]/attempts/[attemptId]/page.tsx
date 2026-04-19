@@ -10,7 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getAttemptDetail } from "@/lib/data";
-import { getActorPresentation, getOutcomeHeadline, getTaskTitle } from "@/lib/display";
+import {
+  getActorPresentation,
+  getFileTouchEmptyMessage,
+  getOutcomeHeadline,
+  getTaskTitle,
+} from "@/lib/display";
 import { formatAbsoluteTime, formatRelativeTime, titleCase } from "@/lib/formatting";
 import { getOutcomeMeta } from "@/lib/status";
 
@@ -118,7 +123,12 @@ export default async function AttemptDetailPage({
               <h2 className="text-sm font-medium text-muted-foreground">Files touched</h2>
               <div className="grid gap-3">
                 {detail.attempt.fileTouches.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No files recorded.</p>
+                  <p className="text-sm text-muted-foreground">
+                    {getFileTouchEmptyMessage(
+                      detail.attempt.attempt.file_count,
+                      detail.attempt.fileTouches,
+                    )}
+                  </p>
                 ) : (
                   detail.attempt.fileTouches.map((touch) => (
                     <div

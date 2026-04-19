@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getActorPresentation, getOutcomeHeadline, getTouchedFilePaths } from "@/lib/display";
 import { formatAbsoluteTime, formatDelta, formatRelativeTime } from "@/lib/formatting";
-import { getActorPresentation, getOutcomeHeadline } from "@/lib/display";
 import { getOutcomeMeta } from "@/lib/status";
 import type { AttemptRecord } from "@/lib/types";
 
@@ -24,17 +24,17 @@ interface AttemptTableProps {
 export function AttemptTable({ projectId, attempts }: AttemptTableProps) {
   return (
     <div className="min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-black/10">
-      <Table className="min-w-[62rem] table-fixed">
+      <Table className="min-w-[68rem] table-fixed">
         <TableHeader>
           <TableRow className="border-white/10 hover:bg-transparent">
-            <TableHead className="sticky left-0 z-10 w-[38%] bg-slate-950/95 backdrop-blur">
+            <TableHead className="sticky left-0 z-10 w-[32%] bg-slate-950/95 backdrop-blur">
               Attempt
             </TableHead>
             <TableHead className="w-[12%]">Status</TableHead>
             <TableHead className="w-[12%]">Actor</TableHead>
-            <TableHead className="w-[14%]">Files</TableHead>
-            <TableHead className="w-[12%]">Impact</TableHead>
-            <TableHead className="w-[12%]">Time</TableHead>
+            <TableHead className="w-[20%]">Edited files</TableHead>
+            <TableHead className="w-[11%]">Impact</TableHead>
+            <TableHead className="w-[13%]">Time</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -44,6 +44,9 @@ export function AttemptTable({ projectId, attempts }: AttemptTableProps) {
               record.attempt.actor_type,
               record.attempt.actor_name,
             );
+            const filePaths = getTouchedFilePaths(record.fileTouches);
+            const visibleFilePaths = filePaths.slice(0, 3);
+            const remainingFileCount = Math.max(filePaths.length - visibleFilePaths.length, 0);
 
             return (
               <TableRow
@@ -62,17 +65,6 @@ export function AttemptTable({ projectId, attempts }: AttemptTableProps) {
                       <p className="break-all font-mono text-xs text-muted-foreground">
                         {record.attempt.id}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {record.fileTouches.slice(0, 3).map((touch) => (
-                        <Badge
-                          key={touch.id}
-                          variant="outline"
-                          className="max-w-full break-all border-white/10 bg-white/5 font-mono text-[11px]"
-                        >
-                          {touch.path}
-                        </Badge>
-                      ))}
                     </div>
                   </Link>
                 </TableCell>
@@ -106,13 +98,39 @@ export function AttemptTable({ projectId, attempts }: AttemptTableProps) {
                   </div>
                 </TableCell>
                 <TableCell className="align-top">
-                  <div className="min-w-0 space-y-1 text-sm text-muted-foreground">
-                    <div>{record.attempt.file_count} touched</div>
-                    <div className="whitespace-normal break-all font-mono text-xs">
-                      {record.fileTouches[0]?.symbol ??
-                        record.fileTouches[0]?.path ??
-                        "No file details"}
+                  <div className="min-w-0 space-y-2 text-sm text-muted-foreground">
+                    <div>
+                      {filePaths.length > 0
+                        ? `${filePaths.length} file${filePaths.length === 1 ? "" : "s"}`
+                        : record.attempt.file_count > 0
+                          ? `${record.attempt.file_count} touched`
+                          : "No files recorded"}
                     </div>
+                    {visibleFilePaths.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {visibleFilePaths.map((path) => (
+                          <Badge
+                            key={path}
+                            variant="outline"
+                            className="max-w-full break-all border-white/10 bg-white/5 font-mono text-[11px]"
+                          >
+                            {path}
+                          </Badge>
+                        ))}
+                        {remainingFileCount > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="border-white/10 bg-white/5 text-[11px] text-muted-foreground"
+                          >
+                            +{remainingFileCount} more
+                          </Badge>
+                        ) : null}
+                      </div>
+                    ) : record.attempt.file_count > 0 ? (
+                      <div className="whitespace-normal break-words text-xs">
+                        File details unavailable.
+                      </div>
+                    ) : null}
                   </div>
                 </TableCell>
                 <TableCell className="align-top whitespace-nowrap">

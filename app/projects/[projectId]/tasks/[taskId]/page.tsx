@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getTaskEpisode } from "@/lib/data";
 import {
   getActorPresentation,
+  getFileTouchEmptyMessage,
   getOutcomeHeadline,
   getTaskStatusLabel,
   getTaskTitle,
@@ -189,7 +190,12 @@ export default async function TaskEpisodePage({
                   <h3 className="text-sm font-medium text-muted-foreground">Files touched</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedAttempt.fileTouches.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No files recorded.</p>
+                      <p className="text-sm text-muted-foreground">
+                        {getFileTouchEmptyMessage(
+                          selectedAttempt.attempt.file_count,
+                          selectedAttempt.fileTouches,
+                        )}
+                      </p>
                     ) : (
                       selectedAttempt.fileTouches.map((touch) => (
                         <Badge

@@ -1,6 +1,6 @@
 import { getOutcomeMeta } from "@/lib/status";
 import { titleCase } from "@/lib/formatting";
-import type { Outcome, SearchTab, Task } from "@/lib/types";
+import type { FileTouch, Outcome, SearchTab, Task } from "@/lib/types";
 
 function cleanValue(value: string | null | undefined) {
   return value?.trim() ?? "";
@@ -106,6 +106,46 @@ export function getProjectRepoHref(repoUrl: string | null) {
   }
 
   return `https://${value.replace(/\.git$/, "")}`;
+}
+
+export function getTouchedFilePaths(
+  fileTouches: Pick<FileTouch, "path">[],
+  limit?: number,
+) {
+  const paths: string[] = [];
+  const seen = new Set<string>();
+
+  for (const touch of fileTouches) {
+    const path = cleanValue(touch.path);
+
+    if (path.length === 0 || seen.has(path)) {
+      continue;
+    }
+
+    seen.add(path);
+    paths.push(path);
+  }
+
+  return typeof limit === "number" ? paths.slice(0, limit) : paths;
+}
+
+export function getFileTouchEmptyMessage(
+  fileCount: number,
+  fileTouches: Pick<FileTouch, "path">[],
+) {
+  const paths = getTouchedFilePaths(fileTouches);
+
+  if (paths.length > 0) {
+    return null;
+  }
+
+  if (fileCount > 0) {
+    return `This attempt reports ${fileCount} touched file${
+      fileCount === 1 ? "" : "s"
+    }, but no file-level records were synced.`;
+  }
+
+  return "No file touch records were synced for this attempt.";
 }
 
 export function getSearchTabLabel(tab: SearchTab) {
