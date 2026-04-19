@@ -1,6 +1,7 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getOutcomeHeadline } from "@/lib/display";
 import type {
   Attempt,
   AttemptDetailData,
@@ -16,12 +17,19 @@ import type {
   SearchTab,
   SemanticMatch,
   Task,
+  TaskSummary,
   TaskEpisodeData,
   TopDeadEndFile,
 } from "@/lib/types";
 
 function ensureClient() {
-  return createServerSupabaseClient();
+  const client = createServerSupabaseClient();
+
+  if (!client) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  return client;
 }
 
 function throwIfError(context: string, error: PostgrestError | null) {
@@ -124,12 +132,162 @@ async function bundleAttemptRecords(
   }));
 }
 
-export async function getProjects() {
-  const client = ensureClient();
-
-  if (!client) {
+async function getTaskSummaries(
+  client: SupabaseClient,
+  projectId: string,
+  tasks: Task[],
+): Promise<TaskSummary[]> {
+  if (tasks.length === 0) {
     return [];
   }
+
+  const taskIds = tasks.map((task) => task.id);
+  const { data, error } = await client
+    .from("attempts")
+    .select("*")
+    .eq("project_id", projectId)
+    .in("task_id", taskIds)
+    .order("started_at", { ascending: false });
+
+  throwIfError("Loading task attempt summaries failed", error);
+
+  const attemptsByTaskId = new Map<string, Attempt[]>();
+
+  for (const attempt of (data ?? []) as Attempt[]) {
+    const bucket = attemptsByTaskId.get(attempt.task_id) ?? [];
+    bucket.push(attempt);
+    attemptsByTaskId.set(attempt.task_id, bucket);
+  }
+
+  const latestAttemptIds = tasks
+    .map((task) => attemptsByTaskId.get(task.id)?.[0]?.id)
+    .filter((value): value is string => Boolean(value));
+  const outcomesByAttemptId = await getOutcomesByAttemptId(client, latestAttemptIds);
+
+  return tasks.map((task) => {
+    const attempts = attemptsByTaskId.get(task.id) ?? [];
+    const latestAttempt = attempts[0] ?? null;
+
+    return {
+      task,
+      attemptCount: attempts.length,
+      latestAttempt,
+      latestOutcome: latestAttempt
+        ? (outcomesByAttemptId.get(latestAttempt.id)?.[0] ?? null)
+        : null,
+    };
+  });
+}
+
+function isFailedWork(attempt: Attempt, outcomes: Outcome[]) {
+  if (attempt.status === "failed" || attempt.status === "reverted") {
+    return true;
+  }
+
+  return outcomes.some((outcome) =>
+    ["tests_failed", "build_failed", "reverted"].includes(outcome.outcome_type),
+  );
+}
+
+async function enrichTopDeadEndFiles(
+  client: SupabaseClient,
+  projectId: string,
+  files: TopDeadEndFile[],
+) {
+  if (files.length === 0) {
+    return files;
+  }
+
+  const paths = files.map((file) => file.path);
+  const { data: touches, error: touchError } = await client
+    .from("file_touches")
+    .select("attempt_id, path")
+    .in("path", paths);
+
+  throwIfError("Loading hotspot file touches failed", touchError);
+
+  const attemptIds = [...new Set((touches ?? []).map((touch) => touch.attempt_id))];
+
+  if (attemptIds.length === 0) {
+    return files;
+  }
+
+  const { data: attempts, error: attemptError } = await client
+    .from("attempts")
+    .select("*")
+    .eq("project_id", projectId)
+    .in("id", attemptIds)
+    .order("started_at", { ascending: false });
+
+  throwIfError("Loading hotspot attempts failed", attemptError);
+
+  const outcomesByAttemptId = await getOutcomesByAttemptId(client, attemptIds);
+  const attemptsById = new Map(((attempts ?? []) as Attempt[]).map((attempt) => [attempt.id, attempt]));
+  const attemptIdsByPath = new Map<string, string[]>();
+
+  for (const touch of touches ?? []) {
+    const bucket = attemptIdsByPath.get(touch.path) ?? [];
+
+    if (!bucket.includes(touch.attempt_id)) {
+      bucket.push(touch.attempt_id);
+    }
+
+    attemptIdsByPath.set(touch.path, bucket);
+  }
+
+  return files.map((file) => {
+    const relatedAttempts = (attemptIdsByPath.get(file.path) ?? [])
+      .map((attemptId) => attemptsById.get(attemptId))
+      .filter((attempt): attempt is Attempt => Boolean(attempt))
+      .sort((left, right) => right.started_at.localeCompare(left.started_at));
+
+    const latestFailure =
+      relatedAttempts.find((attempt) =>
+        isFailedWork(attempt, outcomesByAttemptId.get(attempt.id) ?? []),
+      ) ?? null;
+    const latestRecovery =
+      relatedAttempts.find((attempt) => attempt.status === "accepted") ?? null;
+
+    return {
+      ...file,
+      latest_failure_attempt_id: latestFailure?.id ?? null,
+      latest_failure_summary: latestFailure?.summary ?? null,
+      latest_failure_at: latestFailure?.started_at ?? null,
+      latest_failure_signal: latestFailure
+        ? getOutcomeHeadline(outcomesByAttemptId.get(latestFailure.id)?.[0] ?? null)
+        : null,
+      latest_recovery_attempt_id: latestRecovery?.id ?? null,
+      latest_recovery_summary: latestRecovery?.summary ?? null,
+      latest_recovery_at: latestRecovery?.started_at ?? null,
+    };
+  });
+}
+
+async function enrichSearchResults(client: SupabaseClient, results: SearchResult[]) {
+  if (results.length === 0) {
+    return results;
+  }
+
+  const taskIds = [...new Set(results.map((result) => result.attempt.task_id))];
+  const attemptIds = results.map((result) => result.attempt.id);
+  const [{ data: tasks, error: taskError }, outcomesByAttemptId] = await Promise.all([
+    client.from("tasks").select("*").in("id", taskIds),
+    getOutcomesByAttemptId(client, attemptIds),
+  ]);
+
+  throwIfError("Loading search task context failed", taskError);
+
+  const tasksById = new Map(((tasks ?? []) as Task[]).map((task) => [task.id, task]));
+
+  return results.map((result) => ({
+    ...result,
+    task: tasksById.get(result.attempt.task_id) ?? null,
+    latestOutcome: outcomesByAttemptId.get(result.attempt.id)?.[0] ?? null,
+  }));
+}
+
+export async function getProjects() {
+  const client = ensureClient();
 
   const { data, error } = await client
     .from("projects")
@@ -137,16 +295,11 @@ export async function getProjects() {
     .order("created_at", { ascending: false });
 
   throwIfError("Loading projects failed", error);
-
   return (data ?? []) as Project[];
 }
 
 export async function getProjectChrome(projectId: string): Promise<ProjectChromeData | null> {
   const client = ensureClient();
-
-  if (!client) {
-    return null;
-  }
 
   const [{ data: project, error: projectError }, { data: activeTasks, error: taskError }] =
     await Promise.all([
@@ -178,10 +331,6 @@ export async function getProjectOverview(
 ): Promise<ProjectOverviewData | null> {
   const client = ensureClient();
 
-  if (!client) {
-    return null;
-  }
-
   const [
     { data: project, error: projectError },
     { data: tasks, error: tasksError },
@@ -212,18 +361,25 @@ export async function getProjectOverview(
     return null;
   }
 
-  const bundledAttempts = await bundleAttemptRecords(
-    client,
-    ((attempts ?? []) as Attempt[]).sort((left, right) =>
-      right.started_at.localeCompare(left.started_at),
-    ),
+  const normalizedStats = statsResponse.error ? normalizeStats(null) : normalizeStats(statsResponse.data);
+  const rawTasks = (tasks ?? []) as Task[];
+  const orderedAttempts = ((attempts ?? []) as Attempt[]).sort((left, right) =>
+    right.started_at.localeCompare(left.started_at),
   );
+  const [bundledAttempts, taskSummaries, topDeadEndFiles] = await Promise.all([
+    bundleAttemptRecords(client, orderedAttempts),
+    getTaskSummaries(client, projectId, rawTasks),
+    enrichTopDeadEndFiles(client, projectId, normalizedStats.top_dead_end_files),
+  ]);
 
   return {
     project: project as Project,
-    tasks: (tasks ?? []) as Task[],
+    tasks: taskSummaries,
     attempts: bundledAttempts,
-    stats: statsResponse.error ? normalizeStats(null) : normalizeStats(statsResponse.data),
+    stats: {
+      ...normalizedStats,
+      top_dead_end_files: topDeadEndFiles,
+    },
   };
 }
 
@@ -232,10 +388,6 @@ export async function getTaskEpisode(
   taskId: string,
 ): Promise<TaskEpisodeData | null> {
   const client = ensureClient();
-
-  if (!client) {
-    return null;
-  }
 
   const [
     { data: project, error: projectError },
@@ -277,10 +429,6 @@ export async function getAttemptDetail(
   attemptId: string,
 ): Promise<AttemptDetailData | null> {
   const client = ensureClient();
-
-  if (!client) {
-    return null;
-  }
 
   const [
     { data: project, error: projectError },
@@ -357,16 +505,33 @@ function buildSearchResult(
   matchedOn: SearchTab,
   matchedValue: string,
   note: string | null,
+  identity?: string,
   score?: number,
 ): SearchResult {
   return {
-    id: `${matchedOn}:${attempt.id}:${matchedValue}`,
+    id: identity ?? `${matchedOn}:${attempt.id}:${matchedValue}`,
     matchedOn,
     matchedValue,
     note,
     attempt,
+    task: null,
+    latestOutcome: null,
     score,
   };
+}
+
+function dedupeSearchResults(results: SearchResult[]) {
+  const seen = new Set<string>();
+  return results.filter((result) => {
+    const key = `${result.matchedOn}:${result.attempt.id}:${result.matchedValue}`;
+
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 export async function searchProject(
@@ -377,7 +542,7 @@ export async function searchProject(
   const client = ensureClient();
   const trimmedQuery = query.trim();
 
-  if (!client || trimmedQuery.length === 0) {
+  if (trimmedQuery.length === 0) {
     return {
       query: trimmedQuery,
       tab,
@@ -423,6 +588,7 @@ export async function searchProject(
           tab === "path"
             ? (row as { symbol?: string | null }).symbol ?? null
             : (row as { path: string }).path,
+          `${tab}:${(row as { id: string }).id}`,
         );
       })
       .filter((row): row is SearchResult => row !== null);
@@ -430,7 +596,7 @@ export async function searchProject(
     return {
       query: trimmedQuery,
       tab,
-      results,
+      results: dedupeSearchResults(await enrichSearchResults(client, results)),
       notice: null,
     };
   }
@@ -462,6 +628,7 @@ export async function searchProject(
           tab,
           String((row as { error_sig?: string | null }).error_sig ?? "Unknown signature"),
           String((row as { outcome_type?: string | null }).outcome_type ?? "Outcome"),
+          `${tab}:${(row as { id: string }).id}`,
         );
       })
       .filter((row): row is SearchResult => row !== null);
@@ -469,7 +636,7 @@ export async function searchProject(
     return {
       query: trimmedQuery,
       tab,
-      results,
+      results: dedupeSearchResults(await enrichSearchResults(client, results)),
       notice: null,
     };
   }
@@ -514,6 +681,7 @@ export async function searchProject(
           tab,
           matchedTest,
           (row as { error_sig?: string | null }).error_sig ?? null,
+          `${tab}:${(row as { id: string }).id}:${matchedTest}`,
         );
       })
       .filter((row): row is SearchResult => row !== null);
@@ -521,7 +689,7 @@ export async function searchProject(
     return {
       query: trimmedQuery,
       tab,
-      results,
+      results: dedupeSearchResults(await enrichSearchResults(client, results)),
       notice: null,
     };
   }
@@ -535,8 +703,7 @@ export async function searchProject(
       query: trimmedQuery,
       tab,
       results: [],
-      notice:
-        "Semantic search is unavailable until P3 deploys the Supabase embed function.",
+      notice: "Embedding service unavailable.",
     };
   }
 
@@ -547,7 +714,7 @@ export async function searchProject(
       query: trimmedQuery,
       tab,
       results: [],
-      notice: "Semantic search returned no embedding payload.",
+      notice: "Embedding response was invalid.",
     };
   }
 
@@ -563,8 +730,7 @@ export async function searchProject(
       query: trimmedQuery,
       tab,
       results: [],
-      notice:
-        "Semantic search is waiting on the `match_attempts_semantic` RPC from P3.",
+      notice: "Semantic search backend unavailable.",
     };
   }
 
@@ -591,26 +757,29 @@ export async function searchProject(
     ((attempts ?? []) as Attempt[]).map((attempt) => [attempt.id, attempt]),
   );
 
+  const semanticResults = semanticMatches
+    .map((match) => {
+      const attempt = byAttemptId.get(match.id);
+
+      if (!attempt) {
+        return null;
+      }
+
+      return buildSearchResult(
+        attempt,
+        tab,
+        match.summary ?? "Semantic match",
+        `Similarity ${(match.score * 100).toFixed(1)}%`,
+        `${tab}:${match.id}`,
+        match.score,
+      );
+    })
+    .filter((row): row is SearchResult => row !== null);
+
   return {
     query: trimmedQuery,
     tab,
-    results: semanticMatches
-      .map((match) => {
-        const attempt = byAttemptId.get(match.id);
-
-        if (!attempt) {
-          return null;
-        }
-
-        return buildSearchResult(
-          attempt,
-          tab,
-          match.summary ?? "Semantic match",
-          `Similarity ${(match.score * 100).toFixed(1)}%`,
-          match.score,
-        );
-      })
-      .filter((row): row is SearchResult => row !== null),
+    results: dedupeSearchResults(await enrichSearchResults(client, semanticResults)),
     notice: null,
   };
 }

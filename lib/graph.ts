@@ -53,8 +53,8 @@ export function buildAttemptGraphPositions(attempts: AttemptRecord[]) {
     column.forEach((record, index) => {
       positions.push({
         id: record.attempt.id,
-        x: depth * 316,
-        y: index * 164,
+        x: depth * 284,
+        y: index * 156,
       });
     });
   }

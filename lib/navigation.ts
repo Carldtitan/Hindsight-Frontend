@@ -9,6 +9,7 @@ export interface NavigationItem {
   title: string;
   href: string;
   icon: LucideIcon;
+  view?: "activity";
 }
 
 export function getProjectNavigation(projectId: string): NavigationItem[] {
@@ -25,8 +26,9 @@ export function getProjectNavigation(projectId: string): NavigationItem[] {
     },
     {
       title: "Activity",
-      href: `/projects/${projectId}#attempts`,
+      href: `/projects/${projectId}?view=activity`,
       icon: Activity,
+      view: "activity",
     },
   ];
 }
