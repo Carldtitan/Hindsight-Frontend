@@ -482,14 +482,23 @@ export async function getAttemptDetail(
       outcomes: [],
     } satisfies AttemptRecord);
 
-  if (selectedAttempt.fileTouches.length === 0 && selectedAttempt.outcomes.length === 0) {
+  if (selectedAttempt.fileTouches.length === 0 || selectedAttempt.outcomes.length === 0) {
     const [touchMap, outcomeMap] = await Promise.all([
-      getFileTouchesByAttemptId(client, [attemptId]),
-      getOutcomesByAttemptId(client, [attemptId]),
+      selectedAttempt.fileTouches.length === 0
+        ? getFileTouchesByAttemptId(client, [attemptId])
+        : Promise.resolve(new Map<string, FileTouch[]>()),
+      selectedAttempt.outcomes.length === 0
+        ? getOutcomesByAttemptId(client, [attemptId])
+        : Promise.resolve(new Map<string, Outcome[]>()),
     ]);
 
-    selectedAttempt.fileTouches = touchMap.get(attemptId) ?? [];
-    selectedAttempt.outcomes = outcomeMap.get(attemptId) ?? [];
+    if (selectedAttempt.fileTouches.length === 0) {
+      selectedAttempt.fileTouches = touchMap.get(attemptId) ?? [];
+    }
+
+    if (selectedAttempt.outcomes.length === 0) {
+      selectedAttempt.outcomes = outcomeMap.get(attemptId) ?? [];
+    }
   }
 
   return {

@@ -19,7 +19,12 @@ import { TaskTable } from "@/components/dashboard/task-table";
 import { TopDeadEndFiles } from "@/components/dashboard/top-dead-end-files";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getActorPresentation, getOutcomeHeadline, getTaskTitle } from "@/lib/display";
+import {
+  getActorPresentation,
+  getOutcomeHeadline,
+  getTaskTitle,
+  getTouchedFilePaths,
+} from "@/lib/display";
 import { getProjectOverview } from "@/lib/data";
 import { formatNumber, formatRelativeTime } from "@/lib/formatting";
 
@@ -230,6 +235,7 @@ export default async function ProjectOverviewPage({
                       record.attempt.actor_type,
                       record.attempt.actor_name,
                     );
+                    const touchedPaths = getTouchedFilePaths(record.fileTouches, 3);
 
                     return (
                       <Link
@@ -251,10 +257,17 @@ export default async function ProjectOverviewPage({
                           </p>
                           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <span>{actor.primary}</span>
-                            {record.fileTouches[0]?.path ? (
+                            {touchedPaths.length > 0 ? (
                               <>
                                 <span aria-hidden="true">&bull;</span>
-                                <span className="font-mono">{record.fileTouches[0].path}</span>
+                                {touchedPaths.map((path) => (
+                                  <span
+                                    key={path}
+                                    className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 font-mono"
+                                  >
+                                    {path}
+                                  </span>
+                                ))}
                               </>
                             ) : null}
                           </div>
