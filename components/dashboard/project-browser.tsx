@@ -96,7 +96,7 @@ export function ProjectBrowser({ projects }: ProjectBrowserProps) {
     recentProjectId ? projects.find((project) => project.id === recentProjectId) ?? null : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-card px-4 py-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -117,7 +117,7 @@ export function ProjectBrowser({ projects }: ProjectBrowserProps) {
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-6 pr-1">
+      <div className="pb-6 pr-1">
         {sortedProjects.length === 0 ? (
           <Card className="border border-white/10 bg-card">
             <CardContent className="py-8">
